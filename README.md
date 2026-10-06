@@ -29,5 +29,5 @@ dotnet run --project RenewLedger.csproj --urls http://localhost:5080
 
 ```sh
 dotnet build RenewLedger.csproj --configuration Release
-dotnet run --project tests/RenewLedger.Tests --configuration Release
+dotnet test tests/RenewLedger.Tests --configuration Release
 ```

@@ -9,4 +9,4 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - run: dotnet build RenewLedger.csproj --configuration Release
-      - run: dotnet run --project tests/RenewLedger.Tests --configuration Release
+      - run: dotnet test tests/RenewLedger.Tests --configuration Release

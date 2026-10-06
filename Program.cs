@@ -10,3 +10,5 @@ var app = builder.Build();
 app.UseStaticFiles();
 app.MapRazorPages();
 app.Run();
+
+public partial class Program;
