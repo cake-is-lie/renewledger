@@ -1,12 +1,20 @@
 name: Build and verify
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet build RenewLedger.csproj --configuration Release
-      - run: dotnet test tests/RenewLedger.Tests --configuration Release
+      - run: dotnet restore RenewLedger.sln
+      - run: dotnet build RenewLedger.sln --configuration Release --no-restore
+      - run: dotnet test tests/RenewLedger.Tests --configuration Release --no-build --no-restore
