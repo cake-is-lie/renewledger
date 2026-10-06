@@ -1,63 +1,220 @@
 @page
 @model IndexModel
-@{ var editing = Model.Input.Id.HasValue; }
-<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f5f4ef"><title>RenewLedger · 续费账本</title><link rel="stylesheet" href="~/style.css" asp-append-version="true"></head>
-<body><main>
-<header><a class="brand" asp-page="Index"><span class="mark">↻</span> RenewLedger</a><span class="badge">C# · 本地服务</span></header>
-<section class="intro"><div class="eyebrow">LESS SURPRISE. MORE CONTROL.</div><h1>下一笔续费，<br>心里有数。</h1><p>把订阅、域名和服务器放在一起。看清固定支出，记住重要日期。</p></section>
-@if (Model.Notice is not null) { <p class="message @(Model.NoticeIsError ? "error" : "")" role="@(Model.NoticeIsError ? "alert" : "status")">@Model.Notice</p> }
-@if (Model.Error is not null) { <p class="message error" role="alert">@Model.Error</p> }
-<section class="summary" aria-label="账本概览"><article><span>月均固定支出</span><div>
-@if (Model.All.Count == 0) { <span class="money">—</span> }
-@foreach (var total in Model.Totals.OrderBy(pair => pair.Key)) { <span class="money"><em>@total.Key</em>@total.Value.ToString("N2")</span> }
-</div><small>按币种分别计算 · 年付折算为 12 个月</small></article><article><span>未来 7 天到期</span><strong>@Model.Soon</strong><small>包含今天，不含已过期项目</small></article><article><span>已过期 / 待确认</span><strong>@Model.Overdue</strong><small>续费后手动推进下次日期</small></article></section>
-<section class="workspace"><div class="section-head"><div><h2>你的续费清单 <span>@Model.All.Count 项</span></h2><p>从一项开始，慢慢整理。</p></div><a class="button" asp-page="Index" asp-route-q="@Model.Query" asp-route-filter="@Model.Filter" asp-fragment="editor">＋ 添加项目</a></div>
-<form method="get" class="tools"><input name="q" value="@Model.Query" type="search" placeholder="搜索项目名称…" aria-label="搜索项目名称"><select name="filter" aria-label="筛选到期状态"><option value="all" selected="@(Model.Filter == "all")">全部项目</option><option value="soon" selected="@(Model.Filter == "soon")">7 天内到期</option><option value="overdue" selected="@(Model.Filter == "overdue")">已过期</option></select><button class="quiet">筛选</button><a class="button quiet" asp-page-handler="Export" asp-route-q="@Model.Query" asp-route-filter="@Model.Filter">导出</a></form>
-@foreach (var item in Model.Shown) { var days = Model.Days(item);
-<article class="row"><div><h3>@item.Name</h3><span class="sub">@(item.Cycle == "monthly" ? "每月续费" : "每年续费")</span></div><div class="price">@item.Currency @item.Amount.ToString("N2")</div><div><div class="sub">@Model.DateText(item.Due)</div><span class="status @(days < 0 ? "late" : days <= 7 ? "warn" : "")">@(days < 0 ? $"已过期 {-days} 天" : days == 0 ? "今天到期" : $"{days} 天后到期")</span></div><div class="actions"><form method="post" asp-page-handler="Renew"><partial name="_ViewState" model="Model" /><input type="hidden" name="id" value="@item.Id"><button class="quiet" title="推进一个付费周期">已续费</button></form><a class="button quiet" asp-route-edit="@item.Id" asp-route-q="@Model.Query" asp-route-filter="@Model.Filter" asp-fragment="editor">编辑</a><details><summary class="button quiet">删除</summary><form method="post" asp-page-handler="Delete"><partial name="_ViewState" model="Model" /><input type="hidden" name="id" value="@item.Id"><button class="danger">确认删除</button></form></details></div></article>
+@{
+    var editing = Model.Input.Id.HasValue;
 }
-@if (Model.All.Count == 0 && Model.Error is null) { <div class="empty"><span>↻</span><h3>让下一次续费有迹可循</h3><p>添加你的第一项订阅，或导入现有账本。</p><form method="post" asp-page-handler="Sample"><partial name="_ViewState" model="Model" /><button class="quiet">试用示例数据</button></form></div> }
-else if (Model.Shown.Count == 0 && Model.Error is null) { <p>没有符合条件的项目。</p> }
-</section>
-<section id="editor" class="workspace">
-    <div class="section-head">
-        <h2>@(editing ? "编辑项目" : "添加项目")</h2>
-        @if (editing) { <a asp-page="Index" asp-route-q="@Model.Query" asp-route-filter="@Model.Filter" class="button quiet" asp-fragment="editor">取消编辑</a> }
-    </div>
-    <form method="post" asp-page-handler="Save"><partial name="_ViewState" model="Model" />
-        <div asp-validation-summary="All" role="alert"></div>
-        @if (editing) { <input type="hidden" asp-for="Input.Id"> }
-        <label>项目名称
-            <input asp-for="Input.Name" maxlength="100" required placeholder="例如：云服务器" aria-describedby="name-error">
-            <span asp-validation-for="Input.Name" id="name-error"></span>
-        </label>
-        <div class="form-grid">
-            <label>每次扣款金额
-                <input asp-for="Input.Amount" type="number" min="0" max="1000000000000" step="0.01" required placeholder="0.00" aria-describedby="amount-error">
-                <span asp-validation-for="Input.Amount" id="amount-error"></span>
-            </label>
-            <label>币种
-                <select asp-for="Input.Currency" aria-describedby="currency-error">
-                    @foreach (var currency in LedgerRules.Currencies) { <option value="@currency">@currency</option> }
-                </select>
-                <span asp-validation-for="Input.Currency" id="currency-error"></span>
-            </label>
-            <label>付费周期
-                <select asp-for="Input.Cycle" aria-describedby="cycle-error">
-                    <option value="monthly">月付</option>
-                    <option value="yearly">年付</option>
-                </select>
-                <span asp-validation-for="Input.Cycle" id="cycle-error"></span>
-            </label>
-            <label>下次到期日
-                <input asp-for="Input.Due" type="date" asp-format="{0:yyyy-MM-dd}" required aria-describedby="due-error">
-                <span asp-validation-for="Input.Due" id="due-error"></span>
-            </label>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#f5f4ef">
+    <title>RenewLedger · 续费账本</title>
+    <link rel="stylesheet" href="~/style.css" asp-append-version="true">
+</head>
+<body>
+<main>
+    <header>
+        <a class="brand" asp-page="Index"><span class="mark">↻</span> RenewLedger</a>
+        <span class="badge">C# · 本地服务</span>
+    </header>
+
+    <section class="intro">
+        <div class="eyebrow">LESS SURPRISE. MORE CONTROL.</div>
+        <h1>下一笔续费，<br>心里有数。</h1>
+        <p>把订阅、域名和服务器放在一起。看清固定支出，记住重要日期。</p>
+    </section>
+
+    @if (Model.Notice is not null)
+    {
+        <p class="message @(Model.NoticeIsError ? "error" : "")"
+           role="@(Model.NoticeIsError ? "alert" : "status")">@Model.Notice</p>
+    }
+    @if (Model.Error is not null)
+    {
+        <p class="message error" role="alert">@Model.Error</p>
+    }
+
+    <section class="summary" aria-label="账本概览">
+        <article>
+            <span>月均固定支出</span>
+            <div>
+                @if (Model.All.Count == 0)
+                {
+                    <span class="money">—</span>
+                }
+                @foreach (var total in Model.Totals.OrderBy(pair => pair.Key))
+                {
+                    <span class="money"><em>@total.Key</em>@total.Value.ToString("N2")</span>
+                }
+            </div>
+            <small>按币种分别计算 · 年付折算为 12 个月</small>
+        </article>
+        <article>
+            <span>未来 7 天到期</span>
+            <strong>@Model.Soon</strong>
+            <small>包含今天，不含已过期项目</small>
+        </article>
+        <article>
+            <span>已过期 / 待确认</span>
+            <strong>@Model.Overdue</strong>
+            <small>续费后手动推进下次日期</small>
+        </article>
+    </section>
+
+    <section class="workspace">
+        <div class="section-head">
+            <div>
+                <h2>你的续费清单 <span>@Model.All.Count 项</span></h2>
+                <p>从一项开始，慢慢整理。</p>
+            </div>
+            <a class="button" asp-page="Index" asp-route-q="@Model.Query"
+               asp-route-filter="@Model.Filter" asp-fragment="editor">＋ 添加项目</a>
         </div>
-        <p class="hint">这里只记录日期，不会自动扣款或发送通知。</p>
-        <button type="submit" class="save">保存项目</button>
-    </form>
-</section>
-<section class="workspace"><h2>恢复备份</h2><p class="hint">导入会替换整个账本，请先导出备份。</p><form method="post" asp-page-handler="Import" enctype="multipart/form-data"><partial name="_ViewState" model="Model" /><input name="file" type="file" accept=".json,application/json" required aria-label="选择 JSON 备份"><label class="check"><input type="checkbox" name="replace" value="true" required> 我确认替换当前账本</label><button class="quiet">导入备份</button></form></section>
-<footer><span>账本保存在服务端 data/ledger.json。建议定期导出备份。</span><span>RenewLedger / Demo 0.2</span></footer></main></body></html>
+        <form method="get" class="tools">
+            <input name="q" value="@Model.Query" type="search" placeholder="搜索项目名称…"
+                   aria-label="搜索项目名称">
+            <select name="filter" aria-label="筛选到期状态">
+                <option value="all" selected="@(Model.Filter == "all")">全部项目</option>
+                <option value="soon" selected="@(Model.Filter == "soon")">7 天内到期</option>
+                <option value="overdue" selected="@(Model.Filter == "overdue")">已过期</option>
+            </select>
+            <button class="quiet">筛选</button>
+            <a class="button quiet" asp-page-handler="Export" asp-route-q="@Model.Query"
+               asp-route-filter="@Model.Filter">导出</a>
+        </form>
+
+        @foreach (var item in Model.Shown)
+        {
+            var days = Model.Days(item);
+            <article class="row">
+                <div>
+                    <h3>@item.Name</h3>
+                    <span class="sub">@(item.Cycle == "monthly" ? "每月续费" : "每年续费")</span>
+                </div>
+                <div class="price">@item.Currency @item.Amount.ToString("N2")</div>
+                <div>
+                    <div class="sub">@Model.DateText(item.Due)</div>
+                    <span class="status @(days < 0 ? "late" : days <= 7 ? "warn" : "")">
+                        @(days < 0 ? $"已过期 {-days} 天" : days == 0 ? "今天到期" : $"{days} 天后到期")
+                    </span>
+                </div>
+                <div class="actions">
+                    <form method="post" asp-page-handler="Renew">
+                        <partial name="_ViewState" model="Model" />
+                        <input type="hidden" name="id" value="@item.Id">
+                        <button class="quiet" title="推进一个付费周期">已续费</button>
+                    </form>
+                    <a class="button quiet" asp-route-edit="@item.Id" asp-route-q="@Model.Query"
+                       asp-route-filter="@Model.Filter" asp-fragment="editor">编辑</a>
+                    <details>
+                        <summary class="button quiet">删除</summary>
+                        <form method="post" asp-page-handler="Delete">
+                            <partial name="_ViewState" model="Model" />
+                            <input type="hidden" name="id" value="@item.Id">
+                            <button class="danger">确认删除</button>
+                        </form>
+                    </details>
+                </div>
+            </article>
+        }
+
+        @if (Model.All.Count == 0 && Model.Error is null)
+        {
+            <div class="empty">
+                <span>↻</span>
+                <h3>让下一次续费有迹可循</h3>
+                <p>添加你的第一项订阅，或导入现有账本。</p>
+                <form method="post" asp-page-handler="Sample">
+                    <partial name="_ViewState" model="Model" />
+                    <button class="quiet">试用示例数据</button>
+                </form>
+            </div>
+        }
+        else if (Model.Shown.Count == 0 && Model.Error is null)
+        {
+            <p>没有符合条件的项目。</p>
+        }
+    </section>
+
+    <section id="editor" class="workspace">
+        <div class="section-head">
+            <h2>@(editing ? "编辑项目" : "添加项目")</h2>
+            @if (editing)
+            {
+                <a asp-page="Index" asp-route-q="@Model.Query" asp-route-filter="@Model.Filter"
+                   class="button quiet" asp-fragment="editor">取消编辑</a>
+            }
+        </div>
+        <form method="post" asp-page-handler="Save">
+            <partial name="_ViewState" model="Model" />
+            <div asp-validation-summary="All" role="alert"></div>
+            @if (editing)
+            {
+                <input type="hidden" asp-for="Input.Id">
+            }
+            <label>
+                项目名称
+                <input asp-for="Input.Name" maxlength="100" required placeholder="例如：云服务器"
+                       aria-describedby="name-error">
+                <span asp-validation-for="Input.Name" id="name-error"></span>
+            </label>
+            <div class="form-grid">
+                <label>
+                    每次扣款金额
+                    <input asp-for="Input.Amount" type="number" min="0" max="1000000000000"
+                           step="0.01" required placeholder="0.00" aria-describedby="amount-error">
+                    <span asp-validation-for="Input.Amount" id="amount-error"></span>
+                </label>
+                <label>
+                    币种
+                    <select asp-for="Input.Currency" aria-describedby="currency-error">
+                        @foreach (var currency in LedgerRules.Currencies)
+                        {
+                            <option value="@currency">@currency</option>
+                        }
+                    </select>
+                    <span asp-validation-for="Input.Currency" id="currency-error"></span>
+                </label>
+                <label>
+                    付费周期
+                    <select asp-for="Input.Cycle" aria-describedby="cycle-error">
+                        <option value="monthly">月付</option>
+                        <option value="yearly">年付</option>
+                    </select>
+                    <span asp-validation-for="Input.Cycle" id="cycle-error"></span>
+                </label>
+                <label>
+                    下次到期日
+                    <input asp-for="Input.Due" type="date" asp-format="{0:yyyy-MM-dd}" required
+                           aria-describedby="due-error">
+                    <span asp-validation-for="Input.Due" id="due-error"></span>
+                </label>
+            </div>
+            <p class="hint">这里只记录日期，不会自动扣款或发送通知。</p>
+            <button type="submit" class="save">保存项目</button>
+        </form>
+    </section>
+
+    <section class="workspace">
+        <h2>恢复备份</h2>
+        <p class="hint">导入会替换整个账本，请先导出备份。</p>
+        <form method="post" asp-page-handler="Import" enctype="multipart/form-data">
+            <partial name="_ViewState" model="Model" />
+            <input name="file" type="file" accept=".json,application/json" required
+                   aria-label="选择 JSON 备份">
+            <label class="check">
+                <input type="checkbox" name="replace" value="true" required>
+                我确认替换当前账本
+            </label>
+            <button class="quiet">导入备份</button>
+        </form>
+    </section>
+
+    <footer>
+        <span>账本保存在服务端 data/ledger.json。建议定期导出备份。</span>
+        <span>RenewLedger / Demo 0.2</span>
+    </footer>
+</main>
+</body>
+</html>
