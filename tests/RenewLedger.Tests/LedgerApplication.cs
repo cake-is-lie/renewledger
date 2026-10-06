@@ -48,12 +48,15 @@ internal sealed class LedgerApplication : WebApplicationFactory<Program>
     }
 
     public static async Task<HttpResponseMessage> ImportAsync(
-        HttpClient client, string json, string token, bool replace = true)
+        HttpClient client, string json, string token, bool replace = true,
+        Dictionary<string, string>? viewState = null)
     {
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(token), "__RequestVerificationToken");
         content.Add(new StringContent(replace ? "true" : "false"), "replace");
         content.Add(new StringContent(json), "file", "backup.json");
+        if (viewState is not null)
+            foreach (var field in viewState) content.Add(new StringContent(field.Value), field.Key);
         return await client.PostAsync("/?handler=Import", content);
     }
 

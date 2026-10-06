@@ -16,8 +16,10 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     public DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
     public int Soon => All.Count(item => Days(item) is >= 0 and <= 7);
     public int Overdue => All.Count(item => Days(item) < 0);
-    public string Query { get; private set; } = "";
-    public string Filter { get; private set; } = "all";
+    [BindProperty(SupportsGet = true, Name = "q")]
+    public string? Query { get; set; } = "";
+    [BindProperty(SupportsGet = true, Name = "filter")]
+    public string? Filter { get; set; } = "all";
     public Subscription? Editing { get; private set; }
     public SubscriptionInput Input { get; private set; } = new();
     public string? Error { get; private set; }
@@ -26,10 +28,9 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     public int Days(Subscription item) => LedgerRules.DaysUntil(item.Due, Today);
     public string DateText(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    public void OnGet(string? q, string? filter, Guid? edit)
+    public void OnGet(Guid? edit)
     {
-        Query = q?.Trim() ?? "";
-        Filter = filter ?? "all";
+        NormalizeView();
         LoadLedger(edit);
         Input = Editing is null ? new SubscriptionInput { Due = Today } : new SubscriptionInput
         {
@@ -44,7 +45,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         {
             All = store.Read();
             Totals = LedgerRules.MonthlyTotals(All);
-            Shown = All.Where(item => item.Name.Contains(Query, StringComparison.OrdinalIgnoreCase))
+            Shown = All.Where(item => item.Name.Contains(Query ?? "", StringComparison.OrdinalIgnoreCase))
                 .Where(item => Filter switch
                 {
                     "soon" => Days(item) is >= 0 and <= 7,
@@ -61,6 +62,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
 
     public IActionResult OnPostSave([Bind(Prefix = "Input")] SubscriptionInput input)
     {
+        NormalizeView();
         Input = input;
         if (input.Id == Guid.Empty) ModelState.AddModelError("", "项目标识不正确，请刷新后重试。");
         if (!LedgerRules.Currencies.Contains(input.Currency))
@@ -76,7 +78,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
             store.Save(new Subscription(input.Id ?? Guid.NewGuid(), input.Name.Trim(),
                 input.Amount!.Value, input.Currency, input.Cycle, input.Due!.Value), input.Id.HasValue);
             Notice = "已保存项目。";
-            return RedirectToPage();
+            return RedirectToLedger();
         }
         catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException)
         {
@@ -96,20 +98,22 @@ public sealed class IndexModel(LedgerStore store) : PageModel
 
     public IActionResult OnGetExport()
     {
+        NormalizeView();
         try { return File(Encoding.UTF8.GetBytes(store.Export()), "application/json", $"renewledger-{DateText(Today)}.json"); }
         catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
         {
             Notice = error is InvalidDataException ? error.Message : "导出失败，请检查账本文件。";
-            return RedirectToPage();
+            return RedirectToLedger();
         }
     }
 
     public async Task<IActionResult> OnPostImportAsync(IFormFile? file, bool replace)
     {
+        NormalizeView();
         if (!replace || file is null || file.Length is <= 0 or > 2 * 1024 * 1024)
         {
             Notice = "请选择 2 MB 以内的 JSON 文件，并确认替换当前账本。";
-            return RedirectToPage();
+            return RedirectToLedger();
         }
         try
         {
@@ -120,7 +124,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             Notice = "备份文件无法读取，请重新选择文件。";
-            return RedirectToPage();
+            return RedirectToLedger();
         }
     }
 
@@ -137,13 +141,22 @@ public sealed class IndexModel(LedgerStore store) : PageModel
 
     private IActionResult Change(Action action, string success)
     {
+        NormalizeView();
         try { action(); Notice = success; }
         catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException or JsonException)
         {
             Notice = FailureMessage(error);
         }
-        return RedirectToPage();
+        return RedirectToLedger();
     }
+
+    private void NormalizeView()
+    {
+        Query = Query?.Trim() ?? "";
+        Filter = Filter is "soon" or "overdue" ? Filter : "all";
+    }
+
+    private IActionResult RedirectToLedger() => RedirectToPage(new { q = Query, filter = Filter });
 
     private static string FailureMessage(Exception error) => error switch
     {
