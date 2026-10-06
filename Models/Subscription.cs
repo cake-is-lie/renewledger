@@ -1,6 +1,15 @@
+using System.Text.Json.Serialization;
+
 namespace RenewLedger.Models;
 
 public sealed record Subscription(
-    Guid Id, string Name, decimal Amount, string Currency, string Cycle, DateOnly Due);
+    [property: JsonRequired] Guid Id,
+    [property: JsonRequired] string Name,
+    [property: JsonRequired] decimal Amount,
+    [property: JsonRequired] string Currency,
+    [property: JsonRequired] string Cycle,
+    [property: JsonRequired] DateOnly Due);
 
-public sealed record LedgerBackup(int Version, List<Subscription>? Items);
+public sealed record LedgerBackup(
+    [property: JsonRequired] int Version,
+    [property: JsonRequired] List<Subscription>? Items);

@@ -1,11 +1,37 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using RenewLedger.Models;
 
 namespace RenewLedger.Tests;
 
 public sealed class ImportPageTests
 {
+    [Theory]
+    [InlineData("id")]
+    [InlineData("name")]
+    [InlineData("amount")]
+    [InlineData("currency")]
+    [InlineData("cycle")]
+    [InlineData("due")]
+    public async Task MissingSubscriptionFieldsCannotSilentlyBecomeDefaultValues(string field)
+    {
+        using var app = new LedgerApplication();
+        using var client = app.CreateBrowser();
+        app.Store.Save(new(Guid.NewGuid(), "Server", 10m, "CNY", "monthly", new(2026, 12, 31)), false);
+        var original = File.ReadAllText(app.LedgerPath);
+        var backup = JsonNode.Parse(original)!;
+        backup["items"]![0]!.AsObject().Remove(field);
+
+        using var response = await LedgerApplication.ImportAsync(client, backup.ToJsonString(),
+            await LedgerApplication.TokenAsync(client));
+        using var page = await client.GetAsync(response.Headers.Location);
+        var document = await LedgerApplication.ParseAsync(page);
+
+        Assert.NotNull(document.QuerySelector(".message.error[role=alert]"));
+        Assert.Equal(original, File.ReadAllText(app.LedgerPath));
+    }
+
     [Theory]
     [InlineData("not-json")]
     [InlineData("null")]
