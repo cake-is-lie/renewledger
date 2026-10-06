@@ -42,7 +42,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
                 }).OrderBy(item => item.Due).ToList();
             Editing = All.FirstOrDefault(item => item.Id == edit);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
         {
             Error = error is InvalidDataException ? error.Message : "账本文件无法读取，请检查路径和文件权限。";
         }
@@ -65,9 +65,9 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     public IActionResult OnGetExport()
     {
         try { return File(Encoding.UTF8.GetBytes(store.Export()), "application/json", $"renewledger-{DateText(Today)}.json"); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
         {
-            Notice = "导出失败，请检查账本文件。";
+            Notice = error is InvalidDataException ? error.Message : "导出失败，请检查账本文件。";
             return RedirectToPage();
         }
     }
@@ -79,9 +79,17 @@ public sealed class IndexModel(LedgerStore store) : PageModel
             Notice = "请选择 2 MB 以内的 JSON 文件，并确认替换当前账本。";
             return RedirectToPage();
         }
-        using var reader = new StreamReader(file.OpenReadStream());
-        var json = await reader.ReadToEndAsync();
-        return Change(() => store.Import(json), "备份已导入。");
+        try
+        {
+            using var reader = new StreamReader(file.OpenReadStream());
+            var json = await reader.ReadToEndAsync();
+            return Change(() => store.Import(json), "备份已导入。");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Notice = "备份文件无法读取，请重新选择文件。";
+            return RedirectToPage();
+        }
     }
 
     public IActionResult OnPostSample() => Change(() =>
@@ -98,7 +106,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     private IActionResult Change(Action action, string success)
     {
         try { action(); Notice = success; }
-        catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException or JsonException)
         {
             Notice = error switch
             {

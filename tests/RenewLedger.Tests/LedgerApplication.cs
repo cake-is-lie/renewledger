@@ -47,6 +47,16 @@ internal sealed class LedgerApplication : WebApplicationFactory<Program>
         return await client.PostAsync("/?handler=" + handler, content);
     }
 
+    public static async Task<HttpResponseMessage> ImportAsync(
+        HttpClient client, string json, string token, bool replace = true)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(token), "__RequestVerificationToken");
+        content.Add(new StringContent(replace ? "true" : "false"), "replace");
+        content.Add(new StringContent(json), "file", "backup.json");
+        return await client.PostAsync("/?handler=Import", content);
+    }
+
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
