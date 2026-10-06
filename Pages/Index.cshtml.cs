@@ -19,6 +19,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     public string Query { get; private set; } = "";
     public string Filter { get; private set; } = "all";
     public Subscription? Editing { get; private set; }
+    public SubscriptionInput Input { get; private set; } = new();
     public string? Error { get; private set; }
     [TempData] public string? Notice { get; set; }
 
@@ -29,6 +30,16 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     {
         Query = q?.Trim() ?? "";
         Filter = filter ?? "all";
+        LoadLedger(edit);
+        Input = Editing is null ? new SubscriptionInput { Due = Today } : new SubscriptionInput
+        {
+            Id = Editing.Id, Name = Editing.Name, Amount = Editing.Amount,
+            Currency = Editing.Currency, Cycle = Editing.Cycle, Due = Editing.Due
+        };
+    }
+
+    private void LoadLedger(Guid? edit)
+    {
         try
         {
             All = store.Read();
@@ -48,15 +59,36 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         }
     }
 
-    public IActionResult OnPostSave(Guid? id, string? name, decimal? amount, string? currency, string? cycle, DateOnly? due)
+    public IActionResult OnPostSave([Bind(Prefix = "Input")] SubscriptionInput input)
     {
-        if (!ModelState.IsValid || amount is null || due is null)
+        Input = input;
+        if (input.Id == Guid.Empty) ModelState.AddModelError("", "项目标识不正确，请刷新后重试。");
+        if (!LedgerRules.Currencies.Contains(input.Currency))
+            ModelState.AddModelError("Input.Currency", "请选择支持的币种。");
+        if (input.Cycle is not ("monthly" or "yearly"))
+            ModelState.AddModelError("Input.Cycle", "请选择月付或年付。");
+        if (input.Due == default(DateOnly))
+            ModelState.AddModelError("Input.Due", "请选择有效的到期日。");
+
+        if (!ModelState.IsValid) return SaveFailure();
+        try
         {
-            Notice = "金额或日期格式不正确。";
+            store.Save(new Subscription(input.Id ?? Guid.NewGuid(), input.Name.Trim(),
+                input.Amount!.Value, input.Currency, input.Cycle, input.Due!.Value), input.Id.HasValue);
+            Notice = "已保存项目。";
             return RedirectToPage();
         }
-        return Change(() => store.Save(new Subscription(id ?? Guid.NewGuid(), name?.Trim() ?? "",
-            amount.Value, currency ?? "", cycle ?? "", due.Value), id.HasValue), "已保存项目。");
+        catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            ModelState.AddModelError("", FailureMessage(error));
+            return SaveFailure();
+        }
+    }
+
+    private IActionResult SaveFailure()
+    {
+        LoadLedger(Input.Id);
+        return Page();
     }
 
     public IActionResult OnPostDelete(Guid id) => Change(() => store.Delete(id), "已删除项目。");
@@ -108,15 +140,17 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         try { action(); Notice = success; }
         catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException or JsonException)
         {
-            Notice = error switch
-            {
-                JsonException => "JSON 文件格式不正确。",
-                InvalidDataException => error.Message,
-                IOException or UnauthorizedAccessException => "写入失败，请检查文件权限和磁盘空间。",
-                ArgumentOutOfRangeException => "日期超出支持范围，未修改账本。",
-                _ => error.Message
-            };
+            Notice = FailureMessage(error);
         }
         return RedirectToPage();
     }
+
+    private static string FailureMessage(Exception error) => error switch
+    {
+        JsonException => "JSON 文件格式不正确。",
+        InvalidDataException => error.Message,
+        IOException or UnauthorizedAccessException => "写入失败，请检查文件权限和磁盘空间。",
+        ArgumentOutOfRangeException => "日期超出支持范围，未修改账本。",
+        _ => error.Message
+    };
 }

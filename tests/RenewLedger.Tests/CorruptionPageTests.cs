@@ -41,8 +41,8 @@ public sealed class CorruptionPageTests
         {
             ["__RequestVerificationToken"] = token,
             ["id"] = Guid.NewGuid().ToString(),
-            ["name"] = "Server", ["amount"] = "50", ["currency"] = "CNY",
-            ["cycle"] = "monthly", ["due"] = "2026-12-31"
+            ["Input.Name"] = "Server", ["Input.Amount"] = "50", ["Input.Currency"] = "CNY",
+            ["Input.Cycle"] = "monthly", ["Input.Due"] = "2026-12-31"
         });
 
         using var response = handler == "Import"
