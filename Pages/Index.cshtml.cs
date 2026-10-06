@@ -24,6 +24,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     public SubscriptionInput Input { get; private set; } = new();
     public string? Error { get; private set; }
     [TempData] public string? Notice { get; set; }
+    [TempData] public bool NoticeIsError { get; set; }
 
     public int Days(Subscription item) => LedgerRules.DaysUntil(item.Due, Today);
     public string DateText(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -78,6 +79,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
             store.Save(new Subscription(input.Id ?? Guid.NewGuid(), input.Name.Trim(),
                 input.Amount!.Value, input.Currency, input.Cycle, input.Due!.Value), input.Id.HasValue);
             Notice = "已保存项目。";
+            NoticeIsError = false;
             return RedirectToLedger();
         }
         catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException)
@@ -93,8 +95,8 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         return Page();
     }
 
-    public IActionResult OnPostDelete(Guid id) => Change(() => store.Delete(id), "已删除项目。");
-    public IActionResult OnPostRenew(Guid id) => Change(() => store.Renew(id), "到期日已推进一个周期。");
+    public IActionResult OnPostDelete(Guid id) => Change(() => store.Delete(id), "已删除项目。", id);
+    public IActionResult OnPostRenew(Guid id) => Change(() => store.Renew(id), "到期日已推进一个周期。", id);
 
     public IActionResult OnGetExport()
     {
@@ -103,6 +105,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
         {
             Notice = error is InvalidDataException ? error.Message : "导出失败，请检查账本文件。";
+            NoticeIsError = true;
             return RedirectToLedger();
         }
     }
@@ -113,6 +116,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         if (!replace || file is null || file.Length is <= 0 or > 2 * 1024 * 1024)
         {
             Notice = "请选择 2 MB 以内的 JSON 文件，并确认替换当前账本。";
+            NoticeIsError = true;
             return RedirectToLedger();
         }
         try
@@ -124,6 +128,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             Notice = "备份文件无法读取，请重新选择文件。";
+            NoticeIsError = true;
             return RedirectToLedger();
         }
     }
@@ -139,13 +144,25 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         store.Seed(items);
     }, "已添加示例数据。");
 
-    private IActionResult Change(Action action, string success)
+    private IActionResult Change(Action action, string success, Guid? id = null)
     {
         NormalizeView();
-        try { action(); Notice = success; }
+        if (!ModelState.IsValid || id == Guid.Empty)
+        {
+            Notice = "请求参数不正确，请刷新后重试。";
+            NoticeIsError = true;
+            return RedirectToLedger();
+        }
+        try
+        {
+            action();
+            Notice = success;
+            NoticeIsError = false;
+        }
         catch (Exception error) when (error is ArgumentException or InvalidDataException or IOException or UnauthorizedAccessException or JsonException)
         {
             Notice = FailureMessage(error);
+            NoticeIsError = true;
         }
         return RedirectToLedger();
     }

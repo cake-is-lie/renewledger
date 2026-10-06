@@ -6,7 +6,7 @@
 <body><main>
 <header><a class="brand" asp-page="Index"><span class="mark">↻</span> RenewLedger</a><span class="badge">C# · 本地服务</span></header>
 <section class="intro"><div class="eyebrow">LESS SURPRISE. MORE CONTROL.</div><h1>下一笔续费，<br>心里有数。</h1><p>把订阅、域名和服务器放在一起。看清固定支出，记住重要日期。</p></section>
-@if (Model.Notice is not null) { <p class="message" role="status">@Model.Notice</p> }
+@if (Model.Notice is not null) { <p class="message @(Model.NoticeIsError ? "error" : "")" role="@(Model.NoticeIsError ? "alert" : "status")">@Model.Notice</p> }
 @if (Model.Error is not null) { <p class="message error" role="alert">@Model.Error</p> }
 <section class="summary" aria-label="账本概览"><article><span>月均固定支出</span><div>
 @if (Model.All.Count == 0) { <span class="money">—</span> }
