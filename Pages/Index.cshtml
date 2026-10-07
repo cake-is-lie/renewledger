@@ -39,7 +39,7 @@
         <article>
             <span>月均固定支出</span>
             <div>
-                @if (Model.All.Count == 0)
+                @if (Model.Totals.Count == 0)
                 {
                     <span class="money">—</span>
                 }
@@ -48,7 +48,7 @@
                     <span class="money"><em>@total.Key</em>@total.Value.ToString("N2")</span>
                 }
             </div>
-            <small>按币种分别计算 · 年付折算为 12 个月</small>
+            <small>仅启用项目 · 按币种计算 · 年付折算为 12 个月</small>
         </article>
         <article>
             <span>未来 7 天到期</span>
@@ -78,6 +78,8 @@
                 <option value="all" selected="@(Model.Filter == "all")">全部项目</option>
                 <option value="soon" selected="@(Model.Filter == "soon")">7 天内到期</option>
                 <option value="overdue" selected="@(Model.Filter == "overdue")">已过期</option>
+                <option value="active" selected="@(Model.Filter == "active")">启用项目</option>
+                <option value="disabled" selected="@(Model.Filter == "disabled")">停用项目</option>
             </select>
             <button class="quiet">筛选</button>
             <a class="button quiet" asp-page-handler="Export" asp-route-q="@Model.Query"
@@ -90,21 +92,24 @@
             <article class="row">
                 <div>
                     <h3>@item.Name</h3>
-                    <span class="sub">@(item.Cycle == "monthly" ? "每月续费" : "每年续费")</span>
+                    <span class="sub">@(item.Cycle == "monthly" ? "每月续费" : "每年续费") · @(item.EndOfMonth ? "月末" : $"固定 {item.AnchorDay} 日")</span>
                 </div>
                 <div class="price">@item.Currency @item.Amount.ToString("N2")</div>
                 <div>
                     <div class="sub">@Model.DateText(item.Due)</div>
-                    <span class="status @(days < 0 ? "late" : days <= 7 ? "warn" : "")">
-                        @(days < 0 ? $"已过期 {-days} 天" : days == 0 ? "今天到期" : $"{days} 天后到期")
+                    <span class="status @(item.IsActive ? days < 0 ? "late" : days <= 7 ? "warn" : "" : "")">
+                        @(!item.IsActive ? "已停用" : days < 0 ? $"已过期 {-days} 天" : days == 0 ? "今天到期" : $"{days} 天后到期")
                     </span>
                 </div>
                 <div class="actions">
-                    <form method="post" asp-page-handler="Renew">
-                        <partial name="_ViewState" model="Model" />
-                        <input type="hidden" name="id" value="@item.Id">
-                        <button class="quiet" title="推进一个付费周期">已续费</button>
-                    </form>
+                    @if (item.IsActive)
+                    {
+                        <form method="post" asp-page-handler="Renew">
+                            <partial name="_ViewState" model="Model" />
+                            <input type="hidden" name="id" value="@item.Id">
+                            <button class="quiet" title="推进一个付费周期">已续费</button>
+                        </form>
+                    }
                     <a class="button quiet" asp-route-edit="@item.Id" asp-route-q="@Model.Query"
                        asp-route-filter="@Model.Filter" asp-fragment="editor">编辑</a>
                     <details>
@@ -191,6 +196,21 @@
                     <span asp-validation-for="Input.Due" id="due-error"></span>
                 </label>
             </div>
+            <label>
+                固定续费日（1–31，留空按本次到期日建立锚点）
+                <input asp-for="Input.AnchorDay" type="number" min="1" max="31" placeholder="例如：31"
+                       aria-describedby="anchor-error anchor-hint">
+                <span asp-validation-for="Input.AnchorDay" id="anchor-error"></span>
+            </label>
+            <label class="check">
+                <input asp-for="Input.EndOfMonth" aria-describedby="anchor-hint">
+                使用月末规则（优先于固定续费日）
+            </label>
+            <p class="hint" id="anchor-hint">月付每月使用此规则；年付保留到期月份。例如固定 31 日经过 2 月后恢复为 3 月 31 日。年付 2 月 29 日在闰年恢复。修改到期日时请同时核对规则。</p>
+            <label class="check">
+                <input asp-for="Input.IsActive">
+                启用此项目（停用后保留记录，不计入预计支出和到期提醒）
+            </label>
             <p class="hint">这里只记录日期，不会自动扣款或发送通知。</p>
             <button type="submit" class="save">保存项目</button>
         </form>

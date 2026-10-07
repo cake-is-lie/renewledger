@@ -19,4 +19,9 @@ public sealed class SubscriptionInput
 
     [Required(ErrorMessage = "请选择到期日。")]
     public DateOnly? Due { get; set; }
+
+    [Range(1, 31, ErrorMessage = "续费日必须在 1 到 31 之间。")]
+    public int? AnchorDay { get; set; }
+    public bool EndOfMonth { get; set; }
+    public bool IsActive { get; set; } = true;
 }

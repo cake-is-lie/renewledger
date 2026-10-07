@@ -53,6 +53,7 @@ public sealed class LedgerStore(string path)
             var items = Load();
             var index = items.FindIndex(item => item.Id == id);
             if (index < 0) throw new ArgumentException("项目不存在，请刷新页面。");
+            if (!items[index].IsActive) throw new ArgumentException("项目已停用，请先启用后再续费。");
             items[index] = items[index] with { Due = LedgerRules.NextDate(items[index]), Revision = Guid.NewGuid() };
             Write(items);
         }

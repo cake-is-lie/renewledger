@@ -14,8 +14,8 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     public List<Subscription> Shown { get; private set; } = [];
     public Dictionary<string, decimal> Totals { get; private set; } = [];
     public DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
-    public int Soon => All.Count(item => Days(item) is >= 0 and <= 7);
-    public int Overdue => All.Count(item => Days(item) < 0);
+    public int Soon => All.Count(item => item.IsActive && Days(item) is >= 0 and <= 7);
+    public int Overdue => All.Count(item => item.IsActive && Days(item) < 0);
     [BindProperty(SupportsGet = true, Name = "q")]
     public string? Query { get; set; } = "";
     [BindProperty(SupportsGet = true, Name = "filter")]
@@ -36,7 +36,8 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         Input = Editing is null ? new SubscriptionInput { Due = Today } : new SubscriptionInput
         {
             Id = Editing.Id, Name = Editing.Name, Amount = Editing.Amount,
-            Currency = Editing.Currency, Cycle = Editing.Cycle, Due = Editing.Due
+            Currency = Editing.Currency, Cycle = Editing.Cycle, Due = Editing.Due,
+            AnchorDay = Editing.AnchorDay, EndOfMonth = Editing.EndOfMonth, IsActive = Editing.IsActive
         };
     }
 
@@ -49,8 +50,10 @@ public sealed class IndexModel(LedgerStore store) : PageModel
             Shown = All.Where(item => item.Name.Contains(Query ?? "", StringComparison.OrdinalIgnoreCase))
                 .Where(item => Filter switch
                 {
-                    "soon" => Days(item) is >= 0 and <= 7,
-                    "overdue" => Days(item) < 0,
+                    "soon" => item.IsActive && Days(item) is >= 0 and <= 7,
+                    "overdue" => item.IsActive && Days(item) < 0,
+                    "active" => item.IsActive,
+                    "disabled" => !item.IsActive,
                     _ => true
                 }).OrderBy(item => item.Due).ToList();
             Editing = All.FirstOrDefault(item => item.Id == edit);
@@ -73,11 +76,21 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         if (input.Due == default(DateOnly))
             ModelState.AddModelError("Input.Due", "请选择有效的到期日。");
 
+        Subscription? item = null;
+        if (ModelState.IsValid)
+        {
+            item = LedgerRules.WithAnchors(new Subscription(input.Id ?? Guid.NewGuid(), input.Name.Trim(),
+                input.Amount!.Value, input.Currency, input.Cycle, input.Due!.Value,
+                input.AnchorDay ?? input.Due.Value.Day, input.Due.Value.Month,
+                input.EndOfMonth, input.IsActive));
+            if (!LedgerRules.IsValid(item))
+                ModelState.AddModelError("Input.Due", "到期日与续费规则不一致：固定日期在短月取最后一天，月末规则必须选择当月最后一天。");
+        }
+
         if (!ModelState.IsValid) return SaveFailure();
         try
         {
-            store.Save(new Subscription(input.Id ?? Guid.NewGuid(), input.Name.Trim(),
-                input.Amount!.Value, input.Currency, input.Cycle, input.Due!.Value), input.Id.HasValue);
+            store.Save(item!, input.Id.HasValue);
             Notice = "已保存项目。";
             NoticeIsError = false;
             return RedirectToLedger();
@@ -170,7 +183,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     private void NormalizeView()
     {
         Query = Query?.Trim() ?? "";
-        Filter = Filter is "soon" or "overdue" ? Filter : "all";
+        Filter = Filter is "soon" or "overdue" or "active" or "disabled" ? Filter : "all";
     }
 
     private IActionResult RedirectToLedger() => RedirectToPage(new { q = Query, filter = Filter });
