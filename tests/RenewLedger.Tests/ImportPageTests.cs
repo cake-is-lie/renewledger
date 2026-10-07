@@ -35,7 +35,7 @@ public sealed class ImportPageTests
     [Theory]
     [InlineData("not-json")]
     [InlineData("null")]
-    [InlineData("{\"version\":2,\"items\":[]}")]
+    [InlineData("{\"version\":99,\"items\":[]}")]
     [InlineData("{\"version\":1,\"items\":null}")]
     [InlineData("{\"version\":1,\"items\":[null]}")]
     [InlineData("")]

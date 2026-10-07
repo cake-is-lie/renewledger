@@ -17,7 +17,7 @@ public sealed class LedgerStoreTests : IDisposable
         var store = Store;
         var item = Item;
         store.Save(item, editing: false);
-        Assert.Equal(item, Assert.Single(Store.Read()));
+        Assert.Equal(LedgerRules.WithAnchors(item) with { Revision = Assert.Single(Store.Read()).Revision }, Assert.Single(Store.Read()));
         Assert.Throws<ArgumentException>(() => store.Seed([item with { Id = Guid.NewGuid() }]));
 
         store.Save(item with { Amount = 150m }, editing: true);
@@ -30,7 +30,7 @@ public sealed class LedgerStoreTests : IDisposable
         Assert.Empty(store.Read());
         store.Import(backup);
         Assert.Equal(backup, store.Export());
-        Assert.Throws<ArgumentException>(() => store.Import("{\"version\":2,\"items\":[]}"));
+        Assert.Throws<ArgumentException>(() => store.Import("{\"version\":99,\"items\":[]}"));
         Assert.Equal(backup, store.Export());
     }
 

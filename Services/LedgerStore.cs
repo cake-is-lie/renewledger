@@ -19,6 +19,7 @@ public sealed class LedgerStore(string path)
 
     public void Save(Subscription item, bool editing)
     {
+        item = LedgerRules.WithAnchors(item) with { Revision = Guid.NewGuid() };
         if (!LedgerRules.IsValid(item)) throw new ArgumentException("请检查名称、金额、币种和到期日。");
         lock (gate)
         {
@@ -52,7 +53,7 @@ public sealed class LedgerStore(string path)
             var items = Load();
             var index = items.FindIndex(item => item.Id == id);
             if (index < 0) throw new ArgumentException("项目不存在，请刷新页面。");
-            items[index] = items[index] with { Due = LedgerRules.NextDate(items[index]) };
+            items[index] = items[index] with { Due = LedgerRules.NextDate(items[index]), Revision = Guid.NewGuid() };
             Write(items);
         }
     }
@@ -69,7 +70,8 @@ public sealed class LedgerStore(string path)
 
     public void Seed(List<Subscription> items)
     {
-        var validated = LedgerRules.ValidateBackup(new LedgerBackup(1, items));
+        var validated = LedgerRules.ValidateBackup(new LedgerBackup(2,
+            items.Select(item => LedgerRules.WithAnchors(item) with { Revision = Guid.NewGuid() }).ToList()));
         lock (gate)
         {
             if (Load().Count != 0) throw new ArgumentException("账本非空，未添加示例。");
@@ -79,7 +81,7 @@ public sealed class LedgerStore(string path)
 
     public string Export()
     {
-        lock (gate) return JsonSerializer.Serialize(new LedgerBackup(1, Load()), JsonOptions);
+        lock (gate) return JsonSerializer.Serialize(new LedgerBackup(2, Load()), JsonOptions);
     }
 
     private List<Subscription> Load()
@@ -102,7 +104,7 @@ public sealed class LedgerStore(string path)
         var temporaryPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(new LedgerBackup(1, items), JsonOptions));
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(new LedgerBackup(2, items), JsonOptions));
             File.Move(temporaryPath, fullPath, overwrite: true);
         }
         finally
