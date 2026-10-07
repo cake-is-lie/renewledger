@@ -14,6 +14,11 @@ public sealed class ImportPageTests
     [InlineData("currency")]
     [InlineData("cycle")]
     [InlineData("due")]
+    [InlineData("anchorDay")]
+    [InlineData("anchorMonth")]
+    [InlineData("endOfMonth")]
+    [InlineData("isActive")]
+    [InlineData("revision")]
     public async Task MissingSubscriptionFieldsCannotSilentlyBecomeDefaultValues(string field)
     {
         using var app = new LedgerApplication();

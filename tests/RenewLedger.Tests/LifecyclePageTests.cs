@@ -31,6 +31,7 @@ public sealed class LifecyclePageTests
         Assert.Equal(endOfMonth, form.QuerySelector("input[name='Input.EndOfMonth']")!.HasAttribute("checked"));
         Assert.True(form.QuerySelector("input[name='Input.IsActive']")!.HasAttribute("checked"));
         fields["Input.Id"] = item.Id.ToString();
+        fields["Input.Revision"] = item.Revision.ToString();
         fields["Input.Amount"] = "99.50";
         using var edited = await LedgerApplication.PostAsync(client, "Save", fields);
         Assert.Equal(HttpStatusCode.Redirect, edited.StatusCode);
@@ -72,6 +73,7 @@ public sealed class LifecyclePageTests
         var item = Assert.Single(app.Store.Read());
         var fields = SavePageTests.ValidFields();
         fields["Input.Id"] = item.Id.ToString();
+        fields["Input.Revision"] = item.Revision.ToString();
         fields["Input.Name"] = item.Name;
         fields["Input.Amount"] = "500";
         fields["Input.Cycle"] = "monthly";
@@ -101,6 +103,7 @@ public sealed class LifecyclePageTests
         var backup = JsonSerializer.Deserialize<LedgerBackup>(app.Store.Export(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.False(Assert.Single(LedgerRules.ValidateBackup(backup)).IsActive);
         fields["Input.IsActive"] = "true";
+        fields["Input.Revision"] = item.Revision.ToString();
         using var enabled = await LedgerApplication.PostAsync(client, "Save", fields);
         Assert.Equal(HttpStatusCode.Redirect, enabled.StatusCode);
         item = Assert.Single(app.Store.Read());

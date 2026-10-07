@@ -47,6 +47,7 @@ public sealed class ViewStateTests
         app.Store.Save(item, false);
         var fields = SavePageTests.ValidFields();
         fields["Input.Id"] = item.Id.ToString();
+        fields["Input.Revision"] = Assert.Single(app.Store.Read()).Revision.ToString();
         fields["id"] = item.Id.ToString();
         fields["q"] = Query;
         fields["filter"] = "overdue";

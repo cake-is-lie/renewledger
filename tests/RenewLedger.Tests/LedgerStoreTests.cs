@@ -18,6 +18,7 @@ public sealed class LedgerStoreTests : IDisposable
         var item = Item;
         store.Save(item, editing: false);
         Assert.Equal(LedgerRules.WithAnchors(item) with { Revision = Assert.Single(Store.Read()).Revision }, Assert.Single(Store.Read()));
+        item = Assert.Single(store.Read());
         Assert.Throws<ArgumentException>(() => store.Seed([item with { Id = Guid.NewGuid() }]));
 
         store.Save(item with { Amount = 150m }, editing: true);

@@ -138,4 +138,58 @@ public sealed class RenewalTests
         Assert.Null(document.QuerySelector("#renewal form"));
         Assert.Equal(original, File.ReadAllText(app.LedgerPath));
     }
+
+    [Theory]
+    [InlineData("renew")]
+    [InlineData("import")]
+    [InlineData("disable")]
+    public async Task StaleEditorCannotUndoAChangeAndKeepsTheUserInput(string change)
+    {
+        using var app = new LedgerApplication();
+        using var client = app.CreateBrowser();
+        app.Store.Save(new(Guid.NewGuid(), "Server", 10m, "USD", "monthly", new(2026, 12, 31)), false);
+        var item = Assert.Single(app.Store.Read());
+        using var editPage = await client.GetAsync("/?edit=" + item.Id);
+        var document = await LedgerApplication.ParseAsync(editPage);
+        Assert.Equal(item.Revision.ToString(), document.QuerySelector("#editor input[name='Input.Revision']")!.GetAttribute("value"));
+        switch (change)
+        {
+            case "renew": app.Store.Renew(item.Id, item.Revision); break;
+            case "import": app.Store.Import(app.Store.Export()); break;
+            case "disable": app.Store.Save(item with { IsActive = false }, true); break;
+        }
+        var changed = File.ReadAllText(app.LedgerPath);
+        var fields = SavePageTests.ValidFields();
+        fields["Input.Id"] = item.Id.ToString();
+        fields["Input.Revision"] = item.Revision.ToString();
+        fields["Input.Name"] = "My unsaved change";
+        fields["Input.Amount"] = "42.50";
+        fields["q"] = "Server";
+        fields["filter"] = "active";
+        using var response = await LedgerApplication.PostAsync(client, "Save", fields);
+        document = await LedgerApplication.ParseAsync(response);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("未覆盖新数据", document.QuerySelector(".validation-summary-errors")!.TextContent);
+        Assert.Equal("My unsaved change", document.QuerySelector("#editor input[name='Input.Name']")!.GetAttribute("value"));
+        Assert.Equal(item.Revision.ToString(), document.QuerySelector("#editor input[name='Input.Revision']")!.GetAttribute("value"));
+        Assert.Equal(changed, File.ReadAllText(app.LedgerPath));
+    }
+
+    [Fact]
+    public async Task OutOfRangeConfirmedRenewalDoesNotPartiallyChangeTheLedger()
+    {
+        using var app = new LedgerApplication();
+        using var client = app.CreateBrowser();
+        app.Store.Save(new(Guid.NewGuid(), "Server", 10m, "USD", "yearly", new(9999, 2, 28)), false);
+        var item = Assert.Single(app.Store.Read());
+        var original = File.ReadAllText(app.LedgerPath);
+        using var response = await LedgerApplication.PostAsync(client, "Renew", new()
+        {
+            ["id"] = item.Id.ToString(), ["revision"] = item.Revision.ToString(), ["confirm"] = "true"
+        });
+        using var page = await client.GetAsync(response.Headers.Location);
+        var document = await LedgerApplication.ParseAsync(page);
+        Assert.Contains("日期超出支持范围", document.QuerySelector(".message.error")!.TextContent);
+        Assert.Equal(original, File.ReadAllText(app.LedgerPath));
+    }
 }

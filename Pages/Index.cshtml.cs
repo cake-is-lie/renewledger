@@ -37,7 +37,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
         LoadLedger(edit);
         Input = Editing is null ? new SubscriptionInput { Due = Today } : new SubscriptionInput
         {
-            Id = Editing.Id, Name = Editing.Name, Amount = Editing.Amount,
+            Id = Editing.Id, Revision = Editing.Revision, Name = Editing.Name, Amount = Editing.Amount,
             Currency = Editing.Currency, Cycle = Editing.Cycle, Due = Editing.Due,
             AnchorDay = Editing.AnchorDay, EndOfMonth = Editing.EndOfMonth, IsActive = Editing.IsActive
         };
@@ -102,7 +102,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
             item = LedgerRules.WithAnchors(new Subscription(input.Id ?? Guid.NewGuid(), input.Name.Trim(),
                 input.Amount!.Value, input.Currency, input.Cycle, input.Due!.Value,
                 input.AnchorDay ?? input.Due.Value.Day, input.Due.Value.Month,
-                input.EndOfMonth, input.IsActive));
+                input.EndOfMonth, input.IsActive, input.Revision));
             if (!LedgerRules.IsValid(item))
                 ModelState.AddModelError("Input.Due", "到期日与续费规则不一致：固定日期在短月取最后一天，月末规则必须选择当月最后一天。");
         }

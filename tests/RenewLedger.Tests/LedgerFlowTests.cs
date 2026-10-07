@@ -25,6 +25,7 @@ public sealed class LedgerFlowTests
 
         fields = SavePageTests.ValidFields();
         fields["Input.Id"] = item.Id.ToString();
+        fields["Input.Revision"] = item.Revision.ToString();
         fields["Input.Name"] = "服务器 <script>alert(1)</script>";
         fields["Input.Amount"] = "23.45";
         fields["Input.Cycle"] = "monthly";

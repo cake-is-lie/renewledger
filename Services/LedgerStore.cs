@@ -19,6 +19,7 @@ public sealed class LedgerStore(string path)
 
     public void Save(Subscription item, bool editing)
     {
+        var expectedRevision = item.Revision;
         item = LedgerRules.WithAnchors(item) with { Revision = Guid.NewGuid() };
         if (!LedgerRules.IsValid(item)) throw new ArgumentException("请检查名称、金额、币种和到期日。");
         lock (gate)
@@ -26,6 +27,8 @@ public sealed class LedgerStore(string path)
             var items = Load();
             var index = items.FindIndex(value => value.Id == item.Id);
             if (editing && index < 0) throw new ArgumentException("项目已被删除，请刷新页面。");
+            if (editing && (expectedRevision == Guid.Empty || items[index].Revision != expectedRevision))
+                throw new ArgumentException("项目已变更，请重新打开编辑页核对；未覆盖新数据，当前输入已保留。");
             if (!editing && index >= 0) throw new ArgumentException("项目已存在。");
             if (index >= 0) items[index] = item;
             else
@@ -63,7 +66,7 @@ public sealed class LedgerStore(string path)
 
     public void Import(string json)
     {
-        var items = LedgerRules.ValidateBackup(JsonSerializer.Deserialize<LedgerBackup>(json, JsonOptions));
+        var items = ParseBackup(json);
         // Restoring a backup must invalidate any confirmation opened before the import.
         items = items.Select(item => item with { Revision = Guid.NewGuid() }).ToList();
         lock (gate)
@@ -94,12 +97,33 @@ public sealed class LedgerStore(string path)
         if (!File.Exists(path)) return [];
         try
         {
-            return LedgerRules.ValidateBackup(JsonSerializer.Deserialize<LedgerBackup>(File.ReadAllText(path), JsonOptions));
+            return ParseBackup(File.ReadAllText(path));
         }
         catch (Exception error) when (error is JsonException or ArgumentException)
         {
             throw new InvalidDataException("账本文件损坏；原文件未修改，请从备份恢复。", error);
         }
+    }
+
+    private static List<Subscription> ParseBackup(string json)
+    {
+        var backup = JsonSerializer.Deserialize<LedgerBackup>(json, JsonOptions);
+        var items = LedgerRules.ValidateBackup(backup);
+        if (backup!.Version == 2)
+        {
+            // These flags cannot default silently: false/true would change renewal intent or status.
+            using var document = JsonDocument.Parse(json);
+            var array = document.RootElement.EnumerateObject()
+                .Last(property => property.Name.Equals("items", StringComparison.OrdinalIgnoreCase)).Value;
+            foreach (var element in array.EnumerateArray())
+            {
+                var fields = element.EnumerateObject().Select(property => property.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (!fields.IsSupersetOf(["anchorDay", "anchorMonth", "endOfMonth", "isActive", "revision"]))
+                    throw new ArgumentException("版本 2 备份缺少续费规则、启用状态或记录版本，未修改账本。");
+            }
+        }
+        return items;
     }
 
     private void Write(List<Subscription> items)

@@ -5,6 +5,7 @@ namespace RenewLedger.Pages;
 public sealed class SubscriptionInput
 {
     public Guid? Id { get; set; }
+    public Guid Revision { get; set; }
 
     [Required(ErrorMessage = "请输入项目名称。")]
     [StringLength(100, ErrorMessage = "项目名称不能超过 100 个字符。")]
