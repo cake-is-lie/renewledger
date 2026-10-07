@@ -37,7 +37,10 @@ public sealed class LedgerFlowTests
         Assert.Equal(item.Name, document.QuerySelector(".row h3")!.TextContent);
         Assert.Empty(document.QuerySelectorAll("script"));
 
-        using var renewed = await LedgerApplication.PostAsync(client, "Renew", new() { ["id"] = item.Id.ToString() });
+        using var renewed = await LedgerApplication.PostAsync(client, "Renew", new()
+        {
+            ["id"] = item.Id.ToString(), ["revision"] = item.Revision.ToString(), ["confirm"] = "true"
+        });
         Assert.Equal(HttpStatusCode.Redirect, renewed.StatusCode);
         Assert.Equal(new DateOnly(2027, 1, 31), Assert.Single(app.Store.Read()).Due);
 
@@ -54,7 +57,8 @@ public sealed class LedgerFlowTests
         Assert.Empty(app.Store.Read());
         using var imported = await LedgerApplication.ImportAsync(client, json, await LedgerApplication.TokenAsync(client));
         Assert.Equal(HttpStatusCode.Redirect, imported.StatusCode);
-        Assert.Equal(expected, Assert.Single(app.Store.Read()));
+        var restored = Assert.Single(app.Store.Read());
+        Assert.Equal(expected with { Revision = restored.Revision }, restored);
     }
 
     [Fact]

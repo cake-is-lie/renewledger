@@ -26,7 +26,7 @@ public sealed class ViewStateTests
             Assert.Equal(Query, form.QuerySelector("input[name=q]")!.GetAttribute("value"));
             Assert.Equal("overdue", form.QuerySelector("input[name=filter]")!.GetAttribute("value"));
         }
-        var edit = document.QuerySelector(".actions a")!.GetAttribute("href")!;
+        var edit = document.QuerySelector(".actions a[href*='edit=']")!.GetAttribute("href")!;
         Assert.Equal(Query, QueryHelpers.ParseQuery(new Uri("http://localhost" + edit).Query)["q"]);
         var cancel = document.QuerySelector("#editor .section-head a")!.GetAttribute("href")!;
         Assert.DoesNotContain("edit=", cancel);

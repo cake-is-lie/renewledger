@@ -104,11 +104,8 @@
                 <div class="actions">
                     @if (item.IsActive)
                     {
-                        <form method="post" asp-page-handler="Renew">
-                            <partial name="_ViewState" model="Model" />
-                            <input type="hidden" name="id" value="@item.Id">
-                            <button class="quiet" title="推进一个付费周期">已续费</button>
-                        </form>
+                        <a class="button quiet" asp-route-renew="@item.Id" asp-route-q="@Model.Query"
+                           asp-route-filter="@Model.Filter" asp-fragment="renewal">确认续费</a>
                     }
                     <a class="button quiet" asp-route-edit="@item.Id" asp-route-q="@Model.Query"
                        asp-route-filter="@Model.Filter" asp-fragment="editor">编辑</a>
@@ -141,6 +138,32 @@
             <p>没有符合条件的项目。</p>
         }
     </section>
+
+    @if (Model.Renewing is { } renewing)
+    {
+        <section id="renewal" class="workspace" aria-labelledby="renewal-title">
+            <div class="section-head">
+                <h2 id="renewal-title">确认续费 · @renewing.Name</h2>
+                <a class="button quiet" asp-page="Index" asp-route-q="@Model.Query"
+                   asp-route-filter="@Model.Filter">取消</a>
+            </div>
+            <p>当前周期金额：<strong>@renewing.Currency @renewing.Amount.ToString("N2")</strong></p>
+            <p>计划到期日：<strong>@Model.DateText(renewing.Due)</strong> →
+                <strong>@Model.DateText(Model.RenewalDue!.Value)</strong></p>
+            <p class="hint">从原计划到期日只推进一个周期，不按今天重算。逾期补缴后可能仍显示过期，请核对已缴周期。
+                此操作不记录实际付款金额或付款日期；如套餐涨价，请先编辑项目，再重新确认。</p>
+            <form method="post" asp-page-handler="Renew">
+                <partial name="_ViewState" model="Model" />
+                <input type="hidden" name="id" value="@renewing.Id">
+                <input type="hidden" name="revision" value="@renewing.Revision">
+                <label class="check">
+                    <input type="checkbox" name="confirm" value="true" required>
+                    我已核对项目和新日期，确认推进一个周期
+                </label>
+                <button>确认推进到期日</button>
+            </form>
+        </section>
+    }
 
     <section id="editor" class="workspace">
         <div class="section-head">

@@ -46,7 +46,7 @@ public sealed class LedgerStore(string path)
         }
     }
 
-    public void Renew(Guid id)
+    public void Renew(Guid id, Guid expectedRevision)
     {
         lock (gate)
         {
@@ -54,6 +54,8 @@ public sealed class LedgerStore(string path)
             var index = items.FindIndex(item => item.Id == id);
             if (index < 0) throw new ArgumentException("项目不存在，请刷新页面。");
             if (!items[index].IsActive) throw new ArgumentException("项目已停用，请先启用后再续费。");
+            if (expectedRevision == Guid.Empty || items[index].Revision != expectedRevision)
+                throw new ArgumentException("确认信息已失效：项目可能已续费、编辑或重新导入。请刷新核对，未重复推进日期。");
             items[index] = items[index] with { Due = LedgerRules.NextDate(items[index]), Revision = Guid.NewGuid() };
             Write(items);
         }
@@ -62,6 +64,8 @@ public sealed class LedgerStore(string path)
     public void Import(string json)
     {
         var items = LedgerRules.ValidateBackup(JsonSerializer.Deserialize<LedgerBackup>(json, JsonOptions));
+        // Restoring a backup must invalidate any confirmation opened before the import.
+        items = items.Select(item => item with { Revision = Guid.NewGuid() }).ToList();
         lock (gate)
         {
             Load(); // Refuse to overwrite a corrupted existing ledger.

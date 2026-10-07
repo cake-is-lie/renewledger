@@ -86,7 +86,7 @@ public sealed class LifecyclePageTests
         Assert.False(item.IsActive);
         Assert.Empty(LedgerRules.MonthlyTotals([item]));
         var original = File.ReadAllText(app.LedgerPath);
-        Assert.Throws<ArgumentException>(() => app.Store.Renew(item.Id));
+        Assert.Throws<ArgumentException>(() => app.Store.Renew(item.Id, item.Revision));
         Assert.Equal(original, File.ReadAllText(app.LedgerPath));
 
         foreach (var filter in new[] { "all", "disabled", "active", "soon", "overdue" })

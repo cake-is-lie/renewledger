@@ -21,6 +21,8 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     [BindProperty(SupportsGet = true, Name = "filter")]
     public string? Filter { get; set; } = "all";
     public Subscription? Editing { get; private set; }
+    public Subscription? Renewing { get; private set; }
+    public DateOnly? RenewalDue { get; private set; }
     public SubscriptionInput Input { get; private set; } = new();
     public string? Error { get; private set; }
     [TempData] public string? Notice { get; set; }
@@ -29,7 +31,7 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     public int Days(Subscription item) => LedgerRules.DaysUntil(item.Due, Today);
     public string DateText(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    public void OnGet(Guid? edit)
+    public void OnGet(Guid? edit, Guid? renew)
     {
         NormalizeView();
         LoadLedger(edit);
@@ -39,6 +41,24 @@ public sealed class IndexModel(LedgerStore store) : PageModel
             Currency = Editing.Currency, Cycle = Editing.Cycle, Due = Editing.Due,
             AnchorDay = Editing.AnchorDay, EndOfMonth = Editing.EndOfMonth, IsActive = Editing.IsActive
         };
+        if (renew.HasValue && Error is null)
+        {
+            var item = All.FirstOrDefault(item => item.Id == renew);
+            if (item is null) Error = "项目不存在，请刷新页面。";
+            else if (!item.IsActive) Error = "项目已停用，请先启用后再续费。";
+            else
+            {
+                try
+                {
+                    RenewalDue = LedgerRules.NextDate(item);
+                    Renewing = item;
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    Error = "日期超出支持范围，未修改账本。";
+                }
+            }
+        }
     }
 
     private void LoadLedger(Guid? edit)
@@ -109,7 +129,11 @@ public sealed class IndexModel(LedgerStore store) : PageModel
     }
 
     public IActionResult OnPostDelete(Guid id) => Change(() => store.Delete(id), "已删除项目。", id);
-    public IActionResult OnPostRenew(Guid id) => Change(() => store.Renew(id), "到期日已推进一个周期。", id);
+    public IActionResult OnPostRenew(Guid id, Guid revision, bool confirm) => Change(() =>
+    {
+        if (!confirm) throw new ArgumentException("请先核对续费信息并勾选确认。");
+        store.Renew(id, revision);
+    }, "到期日已推进一个周期。", id);
 
     public IActionResult OnGetExport()
     {

@@ -22,16 +22,17 @@ public sealed class LedgerStoreTests : IDisposable
 
         store.Save(item with { Amount = 150m }, editing: true);
         Assert.Equal(150m, Assert.Single(store.Read()).Amount);
-        store.Renew(item.Id);
+        store.Renew(item.Id, Assert.Single(store.Read()).Revision);
         Assert.Equal(new DateOnly(2027, 1, 31), Assert.Single(store.Read()).Due);
 
         var backup = store.Export();
         store.Delete(item.Id);
         Assert.Empty(store.Read());
         store.Import(backup);
-        Assert.Equal(backup, store.Export());
+        var restoredBackup = store.Export();
+        Assert.NotEqual(backup, restoredBackup); // Import deliberately changes the revision.
         Assert.Throws<ArgumentException>(() => store.Import("{\"version\":99,\"items\":[]}"));
-        Assert.Equal(backup, store.Export());
+        Assert.Equal(restoredBackup, store.Export());
     }
 
     [Fact]
